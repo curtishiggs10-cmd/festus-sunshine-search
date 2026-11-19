@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import sqlite3
 import pandas as pd
 import urllib.parse
@@ -58,7 +58,7 @@ def render_pdf_fetcher(file_list, key_prefix):
     ):
         with col2:
             st.download_button(
-                label="?? Save PDF",
+                label="Save PDF",
                 data=st.session_state[f'{key_prefix}_pdf_data'],
                 file_name=st.session_state[f'{key_prefix}_pdf_name'],
                 mime="application/pdf",
@@ -89,7 +89,7 @@ total_docs = len(directory_df)
 total_pages = int(directory_df["Indexed Pages"].sum()) if not directory_df.empty else 0
 st.caption(f"Currently indexing **{total_docs} documents** ({total_pages:,} total pages) from the City of Festus Sunshine & Data Center records.")
 
-tab_search, tab_directory = st.tabs(["?? Search Records", "?? Full Document Rundown"])
+tab_search, tab_directory = st.tabs(["Search Records", "Full Document Rundown"])
 
 # ---- TAB 1: KEYWORD SEARCH ----
 with tab_search:
