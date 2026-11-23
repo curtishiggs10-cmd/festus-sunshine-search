@@ -83,13 +83,29 @@ directory_df = pd.read_sql_query(
     """,
     conn
 )
+
+has_timeline = conn.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='timeline'"
+).fetchone() is not None
+
+timeline_df = pd.DataFrame()
+if has_timeline:
+    timeline_df = pd.read_sql_query(
+        """
+        SELECT event_date, date_display, event_type, sender, recipients,
+               subject, filename, page_number, snippet
+        FROM timeline
+        ORDER BY event_date ASC
+        """,
+        conn
+    )
 conn.close()
 
 total_docs = len(directory_df)
 total_pages = int(directory_df["Indexed Pages"].sum()) if not directory_df.empty else 0
 st.caption(f"Currently indexing **{total_docs} documents** ({total_pages:,} total pages) from the City of Festus Sunshine & Data Center records.")
 
-tab_search, tab_directory = st.tabs(["Search Records", "Full Document Rundown"])
+tab_search, tab_timeline, tab_directory = st.tabs(["Search Records", "Timeline", "Full Document Rundown"])
 
 # ---- TAB 1: KEYWORD SEARCH ----
 with tab_search:
@@ -146,7 +162,104 @@ with tab_search:
             st.divider()
             render_pdf_fetcher(results_df['Filename'].unique(), key_prefix="search")
 
-# ---- TAB 2: FULL DOCUMENT DIRECTORY ----
+# ---- TAB 2: CHRONOLOGICAL TIMELINE ----
+with tab_timeline:
+    if timeline_df.empty:
+        st.info("Timeline data is not yet built. Run build_timeline.py to populate it.")
+    else:
+        st.caption(
+            "Automated chronological view of extracted email headers and dated standalone filings. "
+            "Undated attachments, text screenshots, and image-only scans are not listed here—use **Search Records** to search full document text."
+        )
+
+        # Parse dates for range filtering
+        parsed_dates = pd.to_datetime(timeline_df["event_date"], errors="coerce")
+        min_date = parsed_dates.min().date()
+        max_date = parsed_dates.max().date()
+
+        fcol1, fcol2, fcol3, fcol4 = st.columns([2, 1, 1, 1])
+        with fcol1:
+            tl_query = st.text_input(
+                "Filter by keyword, person, or subject",
+                key="tl_search"
+            )
+        with fcol2:
+            tl_types = st.multiselect(
+                "Entry Type",
+                options=["Email", "Document"],
+                default=["Email", "Document"],
+                key="tl_types"
+            )
+        with fcol3:
+            date_range = st.date_input(
+                "Date Range",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                key="tl_dates"
+            )
+        with fcol4:
+            sort_order = st.selectbox(
+                "Sort Order",
+                options=["Oldest First", "Newest First"],
+                key="tl_sort"
+            )
+
+        mask = timeline_df["event_type"].isin(tl_types)
+
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_d, end_d = date_range
+            mask &= (parsed_dates.dt.date >= start_d) & (parsed_dates.dt.date <= end_d)
+
+        if tl_query:
+            q = tl_query.lower()
+            text_match = (
+                timeline_df["sender"].fillna("").str.lower().str.contains(q, regex=False)
+                | timeline_df["recipients"].fillna("").str.lower().str.contains(q, regex=False)
+                | timeline_df["subject"].fillna("").str.lower().str.contains(q, regex=False)
+                | timeline_df["snippet"].fillna("").str.lower().str.contains(q, regex=False)
+                | timeline_df["filename"].fillna("").str.lower().str.contains(q, regex=False)
+            )
+            mask &= text_match
+
+        filtered_tl = timeline_df[mask].copy()
+        filtered_tl = filtered_tl.sort_values(
+            by="event_date",
+            ascending=(sort_order == "Oldest First")
+        )
+
+        st.write(f"Showing **{len(filtered_tl):,}** of **{len(timeline_df):,}** timeline entries.")
+
+        display_tl = filtered_tl[[
+            "date_display", "event_type", "sender", "recipients",
+            "subject", "filename", "page_number", "snippet"
+        ]].rename(columns={
+            "date_display": "Date",
+            "event_type": "Type",
+            "sender": "From",
+            "recipients": "To",
+            "subject": "Subject / Title",
+            "filename": "Source File",
+            "page_number": "Page",
+            "snippet": "Preview"
+        })
+
+        st.dataframe(display_tl, hide_index=True, use_container_width=True)
+
+        if not display_tl.empty:
+            tl_csv = display_tl.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Export Timeline to CSV",
+                data=tl_csv,
+                file_name="festus_sunshine_timeline.csv",
+                mime="text/csv",
+                key="tl_export"
+            )
+
+            st.divider()
+            render_pdf_fetcher(filtered_tl["filename"].unique().tolist(), key_prefix="timeline")
+
+# ---- TAB 3: FULL DOCUMENT DIRECTORY ----
 with tab_directory:
     st.write("Browse every document currently indexed in the database and fetch any file directly.")
     st.dataframe(directory_df, hide_index=True, use_container_width=True)
