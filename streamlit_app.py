@@ -177,20 +177,19 @@ with tab_timeline:
         min_date = parsed_dates.min().date()
         max_date = parsed_dates.max().date()
 
-        fcol1, fcol2, fcol3, fcol4 = st.columns([2, 1, 1, 1])
+        tl_query = st.text_input(
+            "Filter by keyword, person, or subject",
+            key="tl_search"
+        )
+        fcol1, fcol2, fcol3 = st.columns([1.2, 1.3, 1])
         with fcol1:
-            tl_query = st.text_input(
-                "Filter by keyword, person, or subject",
-                key="tl_search"
-            )
-        with fcol2:
             tl_types = st.multiselect(
                 "Entry Type",
                 options=["Email", "Document"],
                 default=["Email", "Document"],
                 key="tl_types"
             )
-        with fcol3:
+        with fcol2:
             date_range = st.date_input(
                 "Date Range",
                 value=(min_date, max_date),
@@ -198,7 +197,7 @@ with tab_timeline:
                 max_value=max_date,
                 key="tl_dates"
             )
-        with fcol4:
+        with fcol3:
             sort_order = st.selectbox(
                 "Sort Order",
                 options=["Oldest First", "Newest First"],
